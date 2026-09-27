@@ -1,0 +1,48 @@
+import openai.Tool
+import openai.ToolParameter
+import openai.ToolRegistry
+import openai.ToolCall
+import openai.OpenAiException
+
+class Balance {
+  Integer amount = 10
+
+  @Tool(description: "Add credits to the account", name: "deposit")
+  Integer deposit(@ToolParameter(description: "Credits to add") Integer credits) {
+    amount = amount + credits
+    return amount
+  }
+
+  @Tool(description: "Read the current account balance", name: "read_balance")
+  Integer current() {
+    return amount
+  }
+}
+
+main() {
+  Balance account = Balance()
+  ToolRegistry registry = ToolRegistry(tools: [account.deposit, account.current])
+  require(condition: registry.definitions().size() == 2,
+    message: "Both tool definitions should be exposed to the model")
+
+  ToolCall deposit = ToolCall(callId: "first", name: "deposit",
+    arguments: "{\"credits\":5}")
+  printLine(registry.invoke(call: deposit))
+
+  ToolCall read = ToolCall(callId: "second", name: "read_balance",
+    arguments: "{}")
+  printLine(registry.invoke(call: read))
+
+  Boolean rejected = false
+  try {
+    registry.invoke(call: ToolCall(callId: "invalid", name: "unknown",
+      arguments: "{}"))
+  } catch OpenAiException error {
+    rejected = error.code == "OPENAI-UNKNOWN-TOOL"
+  }
+  require(condition: rejected, message: "Unknown tools must fail")
+}
+
+Module module() {
+  module(dependencies: [dependency(repository: "github", name: "openai", version: 2)])
+}

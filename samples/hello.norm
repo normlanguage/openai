@@ -1,0 +1,22 @@
+import openai.Client
+import openai.ResponseInput
+import openai.ResponseRequest
+import openai.ResponseStatus
+
+main() {
+  Client client = Client(apiKey: "local-fixture-key", model: "local-model",
+    endpoint: "http://127.0.0.1:18766/v1/responses")
+  var answer = client.exchange(stream: false,
+    request: ResponseRequest(model: client.defaultModel(),
+      input: ResponseInput.Text(value: "Greet Norm")))
+  require(condition: answer.status == ResponseStatus.Completed,
+    message: "Local fixture did not complete the response")
+  require(condition: answer.usage?.totalTokens == 5,
+    message: "Local fixture usage was missing or incorrect")
+  printLine(answer.text)
+  printLine(answer.usage!!.totalTokens)
+}
+
+Module module() {
+  module(dependencies: [dependency(repository: "github", name: "openai", version: 2)])
+}

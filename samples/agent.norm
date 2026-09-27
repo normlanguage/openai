@@ -1,0 +1,54 @@
+import openai.Agent
+import openai.Client
+import openai.Response
+import openai.ResponseStatus
+import openai.Tool
+import openai.ToolCall
+import openai.ToolParameter
+import openai.ToolResult
+
+class Account {
+  Integer balance = 0
+
+  @Tool(name: "deposit", description: "Add credits to the account")
+  Integer deposit(@ToolParameter(description: "Credits to add") Integer credits) {
+    balance = balance + credits
+    return balance
+  }
+}
+
+class Observed {
+  Integer requests = 0
+  Integer completedTools = 0
+}
+
+main() {
+  Account account = Account()
+  Client client = Client(apiKey: "local-fixture-key", model: "local-model",
+    endpoint: "http://127.0.0.1:18766/v1/chat/completions")
+  Agent agent = Agent(client: client, tools: [account.deposit])
+
+  Observed observed = Observed()
+  Response response = agent.run(input: "Add five credits",
+    onResponseStarted: (String id) { observed.requests = observed.requests + 1 },
+    onToolCallReceived: (ToolCall call) {
+      require(condition: call.name == "deposit", message: "Unexpected tool")
+    },
+    onToolCompleted: (ToolResult result) {
+      require(condition: result.output == "5", message: "Unexpected tool result")
+      observed.completedTools = observed.completedTools + 1
+    })
+
+  require(condition: response.status == ResponseStatus.Completed,
+    message: "The local model round did not complete")
+  require(condition: response.text == "Balance: 5",
+    message: "The streamed answer was not reconstructed")
+  require(condition: observed.requests == 2 && observed.completedTools == 1 && account.balance == 5,
+    message: "The streamed tool round was not observed")
+  printLine(response.text)
+  printLine(account.balance)
+}
+
+Module module() {
+  module(dependencies: [dependency(repository: "github", name: "openai", version: 2)])
+}
