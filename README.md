@@ -1,5 +1,7 @@
 # OpenAI for Norm
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 OpenAI-compatible Responses and Chat Completions client for [Norm](https://github.com/normlanguage/Norm), with streaming output and function tools.
 
 Add the published module to `module.norm`:
