@@ -1,0 +1,134 @@
+package openai
+
+import std.testing.Test
+import std.http.HttpClient
+import std.http.HttpRequest
+import std.http.HttpResponse
+import std.http.HeaderMap
+import std.http.HttpHeader
+import std.http.Status
+import std.io.Bytes
+import std.io.ReadChunk
+import std.io.encodeText
+import std.io.decodeText
+import std.io.TextEncoding
+import std.json.JsonValue
+import std.json.parseJson
+import std.time.Duration
+import std.serialization.Serializable
+
+@Serializable()
+private value TokenAnswer { String answer }
+
+private class FixtureResponse implements HttpResponse {
+  String body
+  Boolean streaming
+  Boolean read = false
+  public Status status() { return Status(code: 200) }
+  public HeaderMap headers() {
+    return HeaderMap(values: [HttpHeader(name: "Content-Type", value: if streaming { "text/event-stream" } else { "application/json" })])
+  }
+  public ReadChunk read(Integer maximumBytes) {
+    if read { return ReadChunk.Eof }
+    read = true
+    return ReadChunk.Data(bytes: encodeText(text: body, encoding: TextEncoding.Utf8))
+  }
+  public Void close() {}
+}
+
+private class TokenFixture implements HttpClient {
+  Integer? expected
+  Integer calls = 0
+  public HttpResponse send(HttpRequest request, Duration timeout) {
+    calls = calls + 1
+    Boolean chat = request.uri.value.endsWith(suffix: "/chat/completions")
+    String key = if chat { "max_completion_tokens" } else { "max_output_tokens" }
+    Boolean streaming = false
+    switch parseJson(value: decodeText(content: request.body!!, encoding: TextEncoding.Utf8)) {
+      case Object(Map<String, JsonValue> fields) {
+        require(condition: !fields.containsKey(key: if chat { "max_output_tokens" } else { "max_completion_tokens" }), message: "Wrong protocol token field")
+        if expected == null {
+          require(condition: !fields.containsKey(key: key), message: "Token limit must be absent, not JSON null")
+        } else {
+          require(condition: fields.get(key: key) == JsonValue.Number(value: expected!!.toString()), message: "Incorrect token limit")
+        }
+        streaming = fields.get(key: "stream") == JsonValue.Boolean(value: true)
+      }
+      case _ { require(condition: false, message: "Expected a JSON request") }
+    }
+    String body = if chat {
+      "{\"id\":\"test\",\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":\"OK\"}}]}"
+    } else {
+      "{\"id\":\"test\",\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"OK\"}]}]}"
+    }
+    if streaming {
+      require(condition: chat, message: "Fixture streaming uses Chat Completions")
+      body = "data: {\"id\":\"test\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"OK\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"
+    }
+    return FixtureResponse(body: body, streaming: streaming)
+  }
+}
+
+@Test
+Void exchangeTokenLimits() {
+  for String path : ["responses", "chat/completions"] {
+    for Integer? limit : [null, 1, 1024, 8192] {
+      var fixture = TokenFixture(expected: limit)
+      var client = Client(apiKey: "fixture", model: "test", endpoint: "http://localhost/v1/" + path, transport: fixture)
+      var response = client.exchange(stream: false, request: ResponseRequest(model: "test", input: ResponseInput.Text(value: "hello"), maximumOutputTokens: limit))
+      require(condition: response.text == "OK" && fixture.calls == 1, message: "Exchange failed")
+    }
+  }
+}
+
+@Test
+Void defaultTokenLimitIsPreserved() {
+  for String path : ["responses", "chat/completions"] {
+    var fixture = TokenFixture(expected: 1024)
+    var client = Client(apiKey: "fixture", model: "test", endpoint: "http://localhost/v1/" + path, transport: fixture)
+    client.exchange(stream: false, request: ResponseRequest(model: "test", input: ResponseInput.Text(value: "hello")))
+    require(condition: fixture.calls == 1, message: "No request sent")
+  }
+}
+
+@Test
+Void invalidTokenLimitsFailBeforeSending() {
+  for String path : ["responses", "chat/completions"] {
+    for Integer limit : [0, -1] {
+      var fixture = TokenFixture(expected: null)
+      var client = Client(apiKey: "fixture", model: "test", endpoint: "http://localhost/v1/" + path, transport: fixture)
+      Boolean rejected = false
+      try { client.exchange(stream: false, request: ResponseRequest(model: "test", input: ResponseInput.Text(value: "hello"), maximumOutputTokens: limit)) }
+      catch OpenAiException error { rejected = error.code == "OPENAI-INVALID-REQUEST" }
+      require(condition: rejected && fixture.calls == 0, message: "Invalid limit reached transport")
+    }
+  }
+}
+
+@Test
+Void generateCanOmitTokenLimit() {
+  var fixture = TokenFixture(expected: null)
+  var client = Client(apiKey: "fixture", model: "test", endpoint: "http://localhost/v1/chat/completions", transport: fixture)
+  require(condition: client.generate(input: "hello", maximumOutputTokens: null).text == "OK", message: "Generate failed")
+}
+
+@Test
+Void structuredGenerateCanOmitTokenLimit() {
+  var fixture = TokenFixture(expected: null)
+  var client = Client(apiKey: "fixture", model: "test", endpoint: "http://localhost/v1/chat/completions", transport: fixture)
+  require(condition: client.generate<TokenAnswer>(input: "hello", maximumOutputTokens: null).text == "OK", message: "Structured generate failed")
+}
+
+@Test
+Void agentCanOmitTokenLimit() {
+  var fixture = TokenFixture(expected: null)
+  var client = Client(apiKey: "fixture", model: "test", endpoint: "http://localhost/v1/chat/completions", transport: fixture)
+  require(condition: Agent(client: client, maximumOutputTokens: null).run(input: "hello").text == "OK", message: "Agent failed")
+}
+
+@Test
+Void agentDefaultIsPreserved() {
+  var fixture = TokenFixture(expected: 8192)
+  var client = Client(apiKey: "fixture", model: "test", endpoint: "http://localhost/v1/chat/completions", transport: fixture)
+  require(condition: Agent(client: client).run(input: "hello").text == "OK", message: "Agent default failed")
+}

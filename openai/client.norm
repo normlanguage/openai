@@ -117,7 +117,7 @@ public value ResponseRequest {
   ResponseInput input
   String? instructions = null
   StructuredOutput? format = null
-  Integer maximumOutputTokens = 1024
+  Integer? maximumOutputTokens = 1024
   List<ToolDefinition> tools = []
 }
 
@@ -224,7 +224,7 @@ public class Client {
   public String defaultModel() { return model }
 
   public Response generate(String input, String? instructions = null, List<Function<?>> tools = [],
-    Integer maximumOutputTokens = 1024,
+    Integer? maximumOutputTokens = 1024,
     Function<Void(String)>? onResponseStarted = null,
     Function<Void(String)>? onMessageStarted = null,
     Function<Void(String)>? onText = null,
@@ -246,7 +246,7 @@ public class Client {
   }
 
   public Response generate<T>(String input, String? instructions = null,
-    Integer maximumOutputTokens = 1024, StructuredOutputMode mode = StructuredOutputMode.JsonSchema, Function<Void(String)>? onResponseStarted = null,
+    Integer? maximumOutputTokens = 1024, StructuredOutputMode mode = StructuredOutputMode.JsonSchema, Function<Void(String)>? onResponseStarted = null,
     Function<Void(String)>? onMessageStarted = null,
     Function<Void(String)>? onText = null,
     Function<Void(Message)>? onMessageCompleted = null,
@@ -286,8 +286,8 @@ public class Client {
   }
 
   private Response send(ResponseRequest request, Function<Void(String)>? onText = null, GenerationCallbacks? events = null) {
-    if request.model.isBlank || request.maximumOutputTokens < 1 {
-      throw OpenAiException(code: "OPENAI-INVALID-REQUEST", message: "A model and positive token budget are required")
+    if request.model.isBlank || (request.maximumOutputTokens != null && request.maximumOutputTokens!! < 1) {
+      throw OpenAiException(code: "OPENAI-INVALID-REQUEST", message: "A model and a positive token budget (when provided) are required")
     }
     Map<String, JsonValue> payload = Map<>()
     payload.put(key: "model", value: JsonValue.String(value: request.model))
@@ -311,7 +311,7 @@ public class Client {
     }
     payload.put(key: "store", value: JsonValue.Boolean(value: false))
     if onText != null { payload.put(key: "stream", value: JsonValue.Boolean(value: true)) }
-    payload.put(key: "max_output_tokens", value: JsonValue.Number(value: request.maximumOutputTokens.toString()))
+    if request.maximumOutputTokens != null { payload.put(key: "max_output_tokens", value: JsonValue.Number(value: request.maximumOutputTokens!!.toString())) }
     String? instructions = request.instructions
     if instructions != null { payload.put(key: "instructions", value: JsonValue.String(value: instructions)) }
     StructuredOutput? format = request.format
@@ -575,7 +575,8 @@ private Map<String, JsonValue> chatPayload(Map<String, JsonValue> payload) {
   WireObject source = WireObject(value: JsonValue.Object(fields: payload))
   Map<String, JsonValue> result = Map<>()
   result.put(key: "model", value: source.required(name: "model"))
-  result.put(key: "max_completion_tokens", value: source.required(name: "max_output_tokens"))
+  JsonValue? maximumOutputTokens = payload.get(key: "max_output_tokens")
+  if maximumOutputTokens != null { result.put(key: "max_completion_tokens", value: maximumOutputTokens) }
   JsonValue? stream = payload.get(key: "stream")
   if stream != null { result.put(key: "stream", value: stream) }
   List<JsonValue> messages = []

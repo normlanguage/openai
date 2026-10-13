@@ -9,10 +9,10 @@ public class Agent {
   private String? instructions
   private ToolRegistry registry
   private Integer maximumRounds
-  private Integer maximumOutputTokens
+  private Integer? maximumOutputTokens
 
   Agent(Client client, String? instructions = null, List<Function<?>> tools = [],
-    Integer maximumRounds = 64, Integer maximumOutputTokens = 8192) {
+    Integer maximumRounds = 64, Integer? maximumOutputTokens = 8192) {
     if maximumRounds < 1 { throw OpenAiException(code: "OPENAI-INVALID-REQUEST", message: "A positive round limit is required") }
     this.client = client
     this.instructions = instructions
