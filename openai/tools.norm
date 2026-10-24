@@ -53,7 +53,7 @@ public class ToolRegistry {
     this.operations = Map<>()
     this.descriptions = []
     for Function<?> candidate : tools {
-      Function<?> operation = candidate.snapshot()
+      Function<?> operation = candidate
       Tool? metadata = operation.annotation<Tool>()
       if metadata == null { throw OpenAiException(code: "OPENAI-INVALID-TOOL", message: "Tool functions require @Tool") }
       String name = metadata.name ?? operation.name()
@@ -104,3 +104,4 @@ public class ToolRegistry {
     return invokeJson(operation: operation, arguments: arguments)
   }
 }
+
