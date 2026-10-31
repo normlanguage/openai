@@ -1,6 +1,6 @@
 # openai Skill
 
-Use this skill to work with Norm module `openai` version 6. Use only declarations listed below.
+Use this skill to work with Norm module `openai` version 7. Use only declarations listed below.
 
 ## `openai`
 
@@ -453,7 +453,7 @@ class Client
 Creates an OpenAI protocol client.
 
 ```norm
-Client(String apiKey, String model, String endpoint, HttpClient transport, Duration timeout, Integer maximumResponseBytes, HeaderMap headers)
+Client(String apiKey, String model, String endpoint, HttpClient transport, Duration timeout, Integer? maximumResponseBytes, HeaderMap headers)
 ```
 
 Parameters:
@@ -473,8 +473,8 @@ The HTTP transport.
 - `timeout`: `Duration`
 The request timeout.
 
-- `maximumResponseBytes`: `Integer`
-The response byte limit.
+- `maximumResponseBytes`: `Integer?`
+Optional total response byte limit. Streams default to unlimited; buffered responses default to 1 MiB.
 
 - `headers`: `HeaderMap`
 Additional HTTP headers; Authorization and Content-Type are managed by the client.
@@ -485,7 +485,7 @@ Additional HTTP headers; Authorization and Content-Type are managed by the clien
 Creates an OpenAI protocol client.
 
 ```norm
-Client(String apiKey, String model, Array<String> headers, String endpoint, HttpClient transport, Duration timeout, Integer maximumResponseBytes)
+Client(String apiKey, String model, Array<String> headers, String endpoint, HttpClient transport, Duration timeout, Integer? maximumResponseBytes)
 ```
 
 Parameters:
@@ -508,8 +508,8 @@ The HTTP transport.
 - `timeout`: `Duration`
 The request timeout.
 
-- `maximumResponseBytes`: `Integer`
-The response byte limit.
+- `maximumResponseBytes`: `Integer?`
+Optional total response byte limit. Streams default to unlimited; buffered responses default to 1 MiB.
 
 
 #### `defaultModel`

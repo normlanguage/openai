@@ -1,0 +1,53 @@
+package openai
+
+import std.testing.Test
+import std.http.HttpClient
+import std.http.HttpRequest
+import std.http.HttpResponse
+import std.http.HeaderMap
+import std.http.Status
+import std.io.Bytes
+import std.io.ReadChunk
+import std.io.encodeText
+import std.io.TextEncoding
+import std.time.Duration
+
+private class LargeStream implements HttpResponse {
+  Bytes padding
+  Integer blocks = 0
+  Boolean sent = false
+  public Status status() { return Status(code: 200) }
+  public HeaderMap headers() { return HeaderMap(["Content-Type: text/event-stream"]) }
+  public Void close() {}
+  public ReadChunk read(Integer maximumBytes) {
+    if blocks < 129 {
+      blocks = blocks + 1
+      return ReadChunk.Data(bytes: padding)
+    }
+    if sent { return ReadChunk.Eof }
+    sent = true
+    return ReadChunk.Data(bytes: encodeText(text: "\n" + "data: {\"id\":\"r\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"OK\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n", encoding: TextEncoding.Utf8))
+  }
+}
+
+private class StreamTransport implements HttpClient {
+  public HttpResponse send(HttpRequest request, Duration timeout) {
+    String padding = ":"
+    for index : range(start: 0, end: 13) { padding = padding + padding }
+    return LargeStream(padding: encodeText(text: padding, encoding: TextEncoding.Utf8))
+  }
+}
+
+@Test
+Void streamBeyondOneMiB() {
+  var client = Client(apiKey: "test", model: "test", endpoint: "http://localhost/chat/completions", transport: StreamTransport())
+  require(condition: client.generate("hello").text == "OK", message: "Long SSE stream must complete")
+}
+
+@Test
+Void explicitStreamLimit() {
+  var client = Client(apiKey: "test", model: "test", endpoint: "http://localhost/chat/completions", transport: StreamTransport(), maximumResponseBytes: 8192)
+  try { client.generate("hello") }
+  catch OpenAiException error { require(condition: error.code == "OPENAI-STREAM-LIMIT", message: error.message) return }
+  require(condition: false, message: "Explicit stream limit must be enforced")
+}

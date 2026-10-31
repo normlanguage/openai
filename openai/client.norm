@@ -200,8 +200,8 @@ private value WireObject {
   }
 }
 
-private HeaderMap modelHeaders(String apiKey, String model, Integer maximumResponseBytes, HeaderMap headers) {
-  if apiKey.isBlank || model.isBlank || maximumResponseBytes < 1 {
+private HeaderMap modelHeaders(String apiKey, String model, Integer? maximumResponseBytes, HeaderMap headers) {
+  if apiKey.isBlank || model.isBlank || (maximumResponseBytes != null && maximumResponseBytes!! < 1) {
     throw OpenAiException(code: "OPENAI-INVALID-CONFIGURATION", message: "A key and positive response budget are required")
   }
   Array<HttpHeader> values = Array.filled(size: headers.values.size() + 2, value: HttpHeader(name: "", value: ""))
@@ -223,11 +223,11 @@ public class Client {
   private Uri endpoint
   private HttpClient transport
   private Duration timeout
-  private Integer maximumResponseBytes
+  private Integer? maximumResponseBytes
 
   @Document(description: "Creates an OpenAI protocol client.") Client(@Document(description: "The API key.") String apiKey, @Document(description: "The model name.") String model, @Document(description: "The endpoint URL.") String endpoint = "https://api.openai.com/v1/responses",
     @Document(description: "The HTTP transport.") HttpClient transport = systemHttpClient(), @Document(description: "The request timeout.") Duration timeout = duration(seconds: 60, nanoseconds: 0),
-    @Document(description: "The response byte limit.") Integer maximumResponseBytes = 1048576,
+    @Document(description: "Optional total response byte limit. Streams default to unlimited; buffered responses default to 1 MiB.") Integer? maximumResponseBytes = null,
     @Document(description: "Additional HTTP headers; Authorization and Content-Type are managed by the client.") HeaderMap headers = HeaderMap(values: [])) {
     this.headers = modelHeaders(apiKey: apiKey, model: model, maximumResponseBytes: maximumResponseBytes, headers: headers)
     this.model = model
@@ -240,7 +240,7 @@ public class Client {
   @Document(description: "Creates an OpenAI protocol client.") Client(@Document(description: "The API key.") String apiKey, @Document(description: "The model name.") String model, @Document(description: "Additional HTTP headers; Authorization and Content-Type are managed by the client.") Array<String> headers,
     @Document(description: "The endpoint URL.") String endpoint = "https://api.openai.com/v1/responses",
     @Document(description: "The HTTP transport.") HttpClient transport = systemHttpClient(), @Document(description: "The request timeout.") Duration timeout = duration(seconds: 60, nanoseconds: 0),
-    @Document(description: "The response byte limit.") Integer maximumResponseBytes = 1048576) {
+    @Document(description: "Optional total response byte limit. Streams default to unlimited; buffered responses default to 1 MiB.") Integer? maximumResponseBytes = null) {
     this.headers = modelHeaders(apiKey: apiKey, model: model, maximumResponseBytes: maximumResponseBytes, headers: HeaderMap(entries: headers))
     this.model = model
     this.endpoint = Uri(value: endpoint)
@@ -388,7 +388,7 @@ public class Client {
           document = stream.document
         }
       } else {
-        document = responseJson(value: decodeText(content: readAll(reader: incoming, maximumBytes: maximumResponseBytes), encoding: TextEncoding.Utf8), httpStatus: status, requestId: requestId)
+        document = responseJson(value: decodeText(content: readAll(reader: incoming, maximumBytes: maximumResponseBytes ?? 1048576), encoding: TextEncoding.Utf8), httpStatus: status, requestId: requestId)
       }
       try {
         WireObject root = WireObject(value: document)
@@ -769,10 +769,9 @@ private JsonValue chatResponse(WireObject root) {
   return JsonValue.Object(fields: result)
 }
 
-private Void readEventStream(HttpResponse incoming, Function<Boolean(String)> onEvent, Integer maximumBytes) {
-  Array<Integer> lineBytes = Array.filled(size: maximumBytes, value: 0)
-  Integer length = 0
-  Integer consumed = 0
+private Void readEventStream(HttpResponse incoming, Function<Boolean(String)> onEvent, Integer? maximumBytes) {
+  List<Integer> lineBytes = []
+  Integer? remaining = maximumBytes
   Boolean carriageReturn = false
   Boolean firstLine = true
   String data = ""
@@ -781,18 +780,20 @@ private Void readEventStream(HttpResponse incoming, Function<Boolean(String)> on
     switch incoming.read(maximumBytes: 8192) {
       case Eof { ended = true }
       case Data(Bytes chunk) {
-        consumed = consumed + chunk.size()
-        if consumed > maximumBytes { throw OpenAiException(code: "OPENAI-STREAM-LIMIT", message: "Streaming response exceeded byte budget") }
+        if remaining != null {
+          if chunk.size() > remaining!! { throw OpenAiException(code: "OPENAI-STREAM-LIMIT", message: "Streaming response exceeded the configured byte limit") }
+          remaining = remaining!! - chunk.size()
+        }
         for Integer index : range(start: 0, end: chunk.size()) {
           Integer value = chunk.at(index: index)
           if value == 10 && carriageReturn {
             carriageReturn = false
           } else if value == 10 || value == 13 {
             carriageReturn = value == 13
-            Array<Integer> content = Array.filled(size: length, value: 0)
-            for Integer offset : range(start: 0, end: length) { content[offset] = lineBytes[offset] }
+            Array<Integer> content = Array.filled(size: lineBytes.size(), value: 0)
+            for Integer byte,offset : lineBytes { content[offset] = byte }
             String line = decodeText(content: bytes(values: content), encoding: TextEncoding.Utf8)
-            length = 0
+            lineBytes = []
             if firstLine && line.startsWith(prefix: "﻿") { line = line.sliceCodePoints(start: 1, end: line.codePointSize()) }
             firstLine = false
             if line.isEmpty() {
@@ -807,8 +808,7 @@ private Void readEventStream(HttpResponse incoming, Function<Boolean(String)> on
             }
           } else {
             carriageReturn = false
-            lineBytes[length] = value
-            length = length + 1
+            lineBytes.add(value)
           }
         }
       }
