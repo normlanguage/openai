@@ -1,6 +1,6 @@
 # openai Skill
 
-Use this skill to work with Norm module `openai` version 5. Use only declarations listed below.
+Use this skill to work with Norm module `openai` version 6. Use only declarations listed below.
 
 ## `openai`
 
