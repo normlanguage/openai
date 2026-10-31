@@ -1,6 +1,6 @@
 # openai Skill
 
-Use this skill to work with Norm module `openai` version 3. Use only declarations listed below.
+Use this skill to work with Norm module `openai` version 5. Use only declarations listed below.
 
 ## `openai`
 
@@ -442,24 +442,75 @@ Returns: `T`
 
 ### `Client`
 
+Public API declaration Client.
+
 ```norm
 class Client
 ```
 
 #### `Client`
 
+Creates an OpenAI protocol client.
+
 ```norm
-Client(String apiKey, String model, String endpoint, HttpClient transport, Duration timeout, Integer maximumResponseBytes)
+Client(String apiKey, String model, String endpoint, HttpClient transport, Duration timeout, Integer maximumResponseBytes, HeaderMap headers)
 ```
 
 Parameters:
 
 - `apiKey`: `String`
+The API key.
+
 - `model`: `String`
+The model name.
+
 - `endpoint`: `String`
+The endpoint URL.
+
 - `transport`: `HttpClient`
+The HTTP transport.
+
 - `timeout`: `Duration`
+The request timeout.
+
 - `maximumResponseBytes`: `Integer`
+The response byte limit.
+
+- `headers`: `HeaderMap`
+Additional HTTP headers; Authorization and Content-Type are managed by the client.
+
+
+#### `Client`
+
+Creates an OpenAI protocol client.
+
+```norm
+Client(String apiKey, String model, Array<String> headers, String endpoint, HttpClient transport, Duration timeout, Integer maximumResponseBytes)
+```
+
+Parameters:
+
+- `apiKey`: `String`
+The API key.
+
+- `model`: `String`
+The model name.
+
+- `headers`: `Array<String>`
+Additional HTTP headers; Authorization and Content-Type are managed by the client.
+
+- `endpoint`: `String`
+The endpoint URL.
+
+- `transport`: `HttpClient`
+The HTTP transport.
+
+- `timeout`: `Duration`
+The request timeout.
+
+- `maximumResponseBytes`: `Integer`
+The response byte limit.
+
 
 #### `defaultModel`
 
