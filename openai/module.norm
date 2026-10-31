@@ -1,5 +1,5 @@
 Module module() {
-  return module(name: "openai", version: 4, exports: ["client", "tools", "events"])
+  return module(name: "openai", version: 5, exports: ["client", "tools", "events"])
 }
 
 
