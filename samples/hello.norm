@@ -18,5 +18,5 @@ main() {
 }
 
 Module module() {
-  module(dependencies: [dependency(repository: "github", name: "openai", version: 2)])
+  module(dependencies: [dependency(repository: "github", name: "openai", version: 6)])
 }
